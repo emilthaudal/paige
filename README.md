@@ -11,18 +11,19 @@ Active job fires on schedule
   → OpenCode reports PAIGE_STATUS: done / not_done
   → If done → job moves to Pending (awaiting your confirmation)
   → If not done → job stays Active, runs again next tick
-  → You confirm in the TUI → job is Closed
+  → You confirm in the TUI → job is Completed
 ```
 
 ## Job States
 
-| State     | Meaning                                              |
-|-----------|------------------------------------------------------|
-| `active`  | Scheduled, fires on cron                             |
-| `running` | An OpenCode session is currently executing           |
-| `pending` | Agent reported done, awaiting human confirmation     |
-| `closed`  | Confirmed complete                                   |
-| `paused`  | Temporarily disabled                                 |
+| State       | Meaning                                              |
+|-------------|------------------------------------------------------|
+| `active`    | Scheduled, fires on cron                             |
+| `running`   | An OpenCode session is currently executing           |
+| `pending`   | Agent reported done, awaiting human confirmation     |
+| `completed` | Confirmed complete                                   |
+| `cancelled` | Manually cancelled via the TUI                       |
+| `paused`    | Temporarily disabled (not yet implemented)           |
 
 ## Quick Start
 
@@ -78,7 +79,7 @@ make tidy     # go mod tidy
 
 ## Roadmap
 
-- [ ] Full TUI: job detail, run history, confirm/close flow
+- [ ] Full TUI: job detail, run history, confirm/cancel flow
 - [ ] Interactive `paige add` wizard
 - [ ] Context injection (repo info, PR details, file contents)
 - [ ] Structured output from OpenCode (JSON status response)

@@ -4,38 +4,28 @@
 
 The v1 scaffold is complete and `go build ./...` passes cleanly. The following is built and functional:
 
-- **CLI** (`cmd/paige/main.go`): Cobra commands — `serve`, `tui`, `add`, `list`, `close`
-- **Domain types** (`internal/job`): `Job`, `Run`, `State`, `RunStatus` enums, constructors
+- **CLI** (`cmd/paige/main.go`): Cobra commands — `serve`, `tui`, `add`, `list`
+- **Domain types** (`internal/job`): `Job`, `Run`, `State` (`active`, `running`, `pending`, `completed`, `cancelled`, `paused`), `RunStatus` enums, constructors
 - **Store interface + SQLite backend** (`internal/store`): Full CRUD for jobs and runs, schema migration on open
 - **OpenCode HTTP client** (`internal/opencode`): Health check, create/delete session, send prompt, extract text
-- **Daemon** (`internal/daemon`): gocron v2 scheduler, job execution loop, `PAIGE_STATUS` response parsing, state machine transitions
+- **Daemon** (`internal/daemon`): gocron v2 scheduler, job execution loop, `PAIGE_STATUS` response parsing, state machine transitions, `ConfirmJob` (pending → completed), `CancelJob` (any non-terminal → cancelled)
 - **TUI root model** (`internal/tui/tui.go`): Bubble Tea program wiring, view routing
 - **Job list screen** (`internal/tui/joblist.go`): Async load, state icons, `r` to refresh
 - **Job detail stub** (`internal/tui/jobdetail.go`): Present but non-functional (no-op Init/Update/View)
 
 ---
 
-## Known Gaps in the v1 Scaffold
+## Milestone 0 — Fix the Scaffold ✓ Complete
 
-These issues exist in the current code and should be addressed before the v1 milestone is considered done:
+All scaffold issues resolved. The tool runs end-to-end without panics or silent failures.
 
-- **`ConfirmJob` semantics are wrong**: the function is named `ConfirmJob` but immediately transitions the job to `StateClosed`. The intent is that confirming a pending job should close it — so either the name needs fixing or the state machine needs an extra step, depending on whether a re-active flow is ever wanted.
-- **`activeFilter` is declared but never wired**: `JobListModel` has an `activeFilter` field that is never set or read. Either wire it to the state filter tabs or remove it.
-- **`stateLabel()` helper is defined but never called**: dead code in the TUI package.
-- **`jobDetail` on root `Model` is never initialized**: navigating to job detail will panic.
-- **`~/.paige/` is not auto-created on startup**: if the directory doesn't exist, the SQLite store will fail to open. The CLI should create the directory before opening the store.
-
----
-
-## Milestone 0 — Fix the Scaffold
-
-Resolve all known gaps so the tool is runnable end-to-end without panics or silent failures.
-
-- Fix `ConfirmJob` naming/semantics
-- Wire or remove `activeFilter` in `JobListModel`
-- Remove `stateLabel()` dead code
-- Initialize `jobDetail` in root `Model`
-- Auto-create `~/.paige/` directory on startup in the CLI
+- Fixed `ConfirmJob` semantics: pending → completed (was incorrectly closing)
+- Renamed `CloseJob` to `CancelJob`; added `StateCompleted` and `StateCancelled`, removed `StateClosed`
+- Wired cancel keybind (`c`) in the TUI job list with `y/N` confirmation prompt
+- Initialized `jobDetail` in root `Model` (no longer panics on navigation)
+- Auto-create `~/.paige/` on startup via `os.MkdirAll` in `initServices()`
+- Removed `stateLabel()` dead code and unwired `activeFilter` field
+- Removed `paige close` CLI command
 
 ---
 
@@ -44,9 +34,9 @@ Resolve all known gaps so the tool is runnable end-to-end without panics or sile
 A complete, navigable TUI that covers the core user workflow.
 
 - Job detail view: show job metadata and full run history
-- Confirm / close flow: key binding to confirm a pending job from the detail view
+- Confirm / close flow: key binding to confirm a pending job from the detail view (→ completed) or cancel it (→ cancelled)
 - Navigation: list → detail → back, keyboard-driven
-- State filter tabs: filter job list by state (active, pending, closed, paused)
+- State filter tabs: filter job list by state (active, pending, completed, cancelled, paused)
 
 ---
 

@@ -13,34 +13,30 @@ Paige is a local-first CLI tool that schedules AI agent tasks on a cron schedule
 A job is the primary entity. It has a name, a target repository, a prompt template, and a cron schedule. A job moves through a defined set of states:
 
 ```
-                    ┌─────────────────────────────────────────────────────────┐
-                    │                                                         │
-         ┌──────────▼──────────┐    cron fires    ┌──────────────────────┐   │
-         │       ACTIVE        │─────────────────►│       RUNNING        │   │
-         │  scheduled, waiting │                  │  OC session in flight│   │
-         └─────────────────────┘                  └──────────┬───────────┘   │
-                    ▲                                         │               │
-                    │  not done                               │ done          │
-                    └─────────────────────────────────────────┘               │
-                                                              │ done          │
-                                                   ┌──────────▼───────────┐  │
-                                                   │       PENDING        │  │
-                                                   │  awaiting human      │  │
-                                                   │  confirmation        │  │
-                                                   └──────────┬───────────┘  │
-                                                              │               │
-                                          confirm ┌───────────┘               │
-                                                  │                           │
-                                       ┌──────────▼───────────┐              │
-                                       │        CLOSED        │              │
-                                       │  done, archived      │              │
-                                       └──────────────────────┘              │
-                                                                              │
-         ┌─────────────────────┐                                              │
-         │       PAUSED        │◄─────────────────────────────────────────────┘
-         │  temporarily off    │   (manual pause from any state)
-         └─────────────────────┘
+         ┌─────────────────────┐    cron fires    ┌──────────────────────┐
+         │       ACTIVE        │─────────────────►│       RUNNING        │
+         │  scheduled, waiting │                  │  OC session in flight│
+         └─────────────────────┘                  └──────────┬───────────┘
+                    ▲                                         │
+                    │  not done                               │ done
+                    └─────────────────────────────────────────┘
+                                                              │ done
+                                                   ┌──────────▼───────────┐
+                                                   │       PENDING        │
+                                                   │  awaiting human      │
+                                                   │  confirmation        │
+                                                   └──────────┬───────────┘
+                                                              │
+                                          confirm             │
+                                                   ┌──────────▼───────────┐
+                                                   │      COMPLETED       │
+                                                   │  confirmed complete  │
+                                                   └──────────────────────┘
 ```
+
+`CANCELLED` is a terminal state reachable from any non-terminal state (`active`, `running`, `pending`) via the TUI cancel keybind (`c`).
+
+`PAUSED` is defined but not yet wired to daemon methods — present for future use.
 
 ### Run
 
@@ -62,7 +58,6 @@ Each run creates a fresh OpenCode session via the OpenCode HTTP API, sends an en
 │  paige serve    ──► starts daemon only (headless)             │
 │  paige add      ──► creates a job in the store                │
 │  paige list     ──► reads jobs from the store                 │
-│  paige close    ──► closes a job via the daemon               │
 └───────────┬──────────────────────────────┬─────────────────────┘
             │                              │
 ┌───────────▼──────────┐       ┌───────────▼──────────────────────┐
@@ -121,7 +116,7 @@ The domain package. Contains no I/O, no dependencies outside stdlib. Defines the
 |---|---|
 | `Job` | Primary entity: name, repo, prompt, schedule, state |
 | `Run` | Single execution record for a job |
-| `State` | Enum: `active`, `running`, `pending`, `closed`, `paused` |
+| `State` | Enum: `active`, `running`, `pending`, `completed`, `cancelled`, `paused` |
 | `RunStatus` | Enum: `running`, `done`, `failed` |
 | `NewJob(...)` | Constructor — sets UUID, defaults to `StateActive` |
 | `NewRun(...)` | Constructor — sets UUID, defaults to `RunStatusRunning` |
@@ -161,8 +156,8 @@ The scheduler and execution engine. Owns the gocron instance and job lifecycle.
 | `New(store, oc)` | Constructor |
 | `Start(ctx)` | Loads active jobs, starts scheduler, blocks until ctx cancelled |
 | `RegisterJob(ctx, job)` | Persists job and adds it to the live scheduler |
-| `ConfirmJob(ctx, id)` | Transitions a pending job to closed |
-| `CloseJob(ctx, id)` | Closes a job and removes it from the scheduler |
+| `ConfirmJob(ctx, id)` | Transitions a pending job to completed, removes from scheduler |
+| `CancelJob(ctx, id)` | Transitions any non-terminal job to cancelled, removes from scheduler |
 | `executeJob(jobID)` | Core execution: create OC session → send prompt → parse status → update state |
 
 ### `internal/tui`
