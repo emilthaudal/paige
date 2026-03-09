@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "paige",
+  "project_id": "c8cf5be3-1e0a-4d16-b768-87b3fbf47337"
+}
