@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -32,18 +31,37 @@ func (i jobItem) Description() string {
 
 func (i jobItem) FilterValue() string { return i.j.Name }
 
+// cancelledMsg is sent when a CancelJob call completes (err may be nil).
+type cancelledMsg struct{ err error }
+
 // JobListModel is the job list screen.
 type JobListModel struct {
-	daemon       *daemon.Daemon
-	store        store.Store
-	list         list.Model
-	activeFilter job.State // "" = all
-	loading      bool
-	err          error
+	daemon     *daemon.Daemon
+	store      store.Store
+	list       list.Model
+	loading    bool
+	err        error
+	confirming bool   // true while waiting for y/n to cancel a job
+	cancelID   string // name of the job being confirmed for cancellation
 }
 
 type jobsLoadedMsg struct{ jobs []job.Job }
 type jobsErrMsg struct{ err error }
+
+// keyBindings holds the extra keys shown in the help footer.
+var keyBindings = struct {
+	cancel  key.Binding
+	refresh key.Binding
+}{
+	cancel: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "cancel job"),
+	),
+	refresh: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "refresh"),
+	),
+}
 
 // NewJobListModel creates a job list model.
 func NewJobListModel(d *daemon.Daemon, st store.Store) *JobListModel {
@@ -57,7 +75,12 @@ func NewJobListModel(d *daemon.Daemon, st store.Store) *JobListModel {
 	l := list.New(nil, delegate, 0, 0)
 	l.Title = "Jobs"
 	l.SetShowHelp(true)
-	l.AdditionalFullHelpKeys = func() []key.Binding { return []key.Binding{} }
+	l.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{keyBindings.cancel, keyBindings.refresh}
+	}
+	l.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{keyBindings.cancel, keyBindings.refresh}
+	}
 
 	return &JobListModel{
 		daemon: d,
@@ -89,11 +112,42 @@ func (m *JobListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 
+	case cancelledMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		// Refresh the list after a successful cancel.
+		m.loading = true
+		return m, m.loadJobs()
+
 	case tea.KeyMsg:
+		// Confirmation prompt intercepts all keys.
+		if m.confirming {
+			switch msg.String() {
+			case "y", "Y":
+				m.confirming = false
+				return m, m.cancelFocusedJob()
+			default:
+				m.confirming = false
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "r":
 			m.loading = true
 			return m, m.loadJobs()
+		case "c":
+			if item, ok := m.list.SelectedItem().(jobItem); ok {
+				j := item.j
+				// Only allow cancelling non-terminal jobs.
+				if j.State != job.StateCompleted && j.State != job.StateCancelled {
+					m.confirming = true
+					m.cancelID = j.Name
+					return m, nil
+				}
+			}
 		}
 	}
 
@@ -110,6 +164,13 @@ func (m *JobListModel) View() string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("9")).
 			Render("Error: " + m.err.Error())
 	}
+	if m.confirming {
+		prompt := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("11")).
+			Bold(true).
+			Render(fmt.Sprintf("Cancel job %q? (y/N) ", m.cancelID))
+		return m.list.View() + "\n\n" + prompt
+	}
 	return m.list.View()
 }
 
@@ -125,6 +186,20 @@ func (m *JobListModel) loadJobs() tea.Cmd {
 	}
 }
 
+func (m *JobListModel) cancelFocusedJob() tea.Cmd {
+	item, ok := m.list.SelectedItem().(jobItem)
+	if !ok {
+		return nil
+	}
+	id := item.j.ID
+	d := m.daemon
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return cancelledMsg{err: d.CancelJob(ctx, id)}
+	}
+}
+
 // --- helpers ---
 
 func stateIcon(s job.State) string {
@@ -135,8 +210,10 @@ func stateIcon(s job.State) string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Render("◌")
 	case job.StatePending:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("◉")
-	case job.StateClosed:
+	case job.StateCompleted:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("✓")
+	case job.StateCancelled:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("✕")
 	case job.StatePaused:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("⏸")
 	default:
@@ -156,8 +233,4 @@ func humanTime(t time.Time) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-}
-
-func stateLabel(s job.State) string {
-	return strings.ToUpper(string(s))
 }

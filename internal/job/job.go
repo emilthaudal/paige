@@ -18,8 +18,10 @@ const (
 	StateRunning State = "running"
 	// StatePending means OpenCode reported the task is done; awaiting human confirmation.
 	StatePending State = "pending"
-	// StateClosed means the human confirmed the job is complete.
-	StateClosed State = "closed"
+	// StateCompleted means the human confirmed the agent's "done" signal. Terminal.
+	StateCompleted State = "completed"
+	// StateCancelled means the user explicitly stopped the job. Terminal.
+	StateCancelled State = "cancelled"
 	// StatePaused means the job is temporarily disabled.
 	StatePaused State = "paused"
 )

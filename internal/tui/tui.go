@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/emtb/paige/internal/daemon"
+	"github.com/emtb/paige/internal/job"
 	"github.com/emtb/paige/internal/store"
 )
 
@@ -36,10 +37,11 @@ type Model struct {
 // NewModel creates the root TUI model.
 func NewModel(d *daemon.Daemon, st store.Store) Model {
 	return Model{
-		daemon:  d,
-		store:   st,
-		current: viewJobList,
-		jobList: NewJobListModel(d, st),
+		daemon:    d,
+		store:     st,
+		current:   viewJobList,
+		jobList:   NewJobListModel(d, st),
+		jobDetail: NewJobDetailModel(d, st, job.Job{}),
 	}
 }
 

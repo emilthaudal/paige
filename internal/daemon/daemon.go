@@ -86,7 +86,8 @@ func (d *Daemon) RegisterJob(ctx context.Context, j job.Job) error {
 	return d.scheduleJob(j)
 }
 
-// ConfirmJob transitions a pending job back to active (human confirmed done).
+// ConfirmJob transitions a pending job to completed (human confirmed agent is done).
+// The job is unscheduled — completed is a terminal state.
 func (d *Daemon) ConfirmJob(ctx context.Context, id uuid.UUID) error {
 	j, err := d.store.GetJob(ctx, id)
 	if err != nil {
@@ -95,17 +96,24 @@ func (d *Daemon) ConfirmJob(ctx context.Context, id uuid.UUID) error {
 	if j.State != job.StatePending {
 		return fmt.Errorf("job %s is not pending (state: %s)", id, j.State)
 	}
-	j.State = job.StateClosed
-	return d.store.UpdateJob(ctx, j)
+	j.State = job.StateCompleted
+	if err := d.store.UpdateJob(ctx, j); err != nil {
+		return err
+	}
+	return d.unscheduleJob(id)
 }
 
-// CloseJob moves a job to the closed state and removes it from the scheduler.
-func (d *Daemon) CloseJob(ctx context.Context, id uuid.UUID) error {
+// CancelJob moves a job to the cancelled state and removes it from the scheduler.
+// It may be called from any non-terminal state (active, running, pending, paused).
+func (d *Daemon) CancelJob(ctx context.Context, id uuid.UUID) error {
 	j, err := d.store.GetJob(ctx, id)
 	if err != nil {
 		return err
 	}
-	j.State = job.StateClosed
+	if j.State == job.StateCompleted || j.State == job.StateCancelled {
+		return fmt.Errorf("job %s is already terminal (state: %s)", id, j.State)
+	}
+	j.State = job.StateCancelled
 	if err := d.store.UpdateJob(ctx, j); err != nil {
 		return err
 	}
