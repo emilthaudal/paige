@@ -1,0 +1,26 @@
+# Binaries
+paige
+dist/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+~/.paige/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Go
+*.test
+*.out
+vendor/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
