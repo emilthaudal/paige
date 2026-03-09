@@ -138,7 +138,8 @@ HTTP client for the OpenCode server API. Stateless — no caching, no session re
 
 | Type / Function | Purpose |
 |---|---|
-| `Client` | HTTP client with base URL and timeout |
+| `OCClient` | Interface: `CreateSession`, `SendPrompt`, `DeleteSession` — allows daemon tests to inject a mock |
+| `Client` | Concrete HTTP client implementing `OCClient`; has base URL and timeout |
 | `NewClient(opts...)` | Constructor with functional options |
 | `Health(ctx)` | Checks if the OpenCode server is reachable |
 | `CreateSession(ctx, title)` | Creates a new OpenCode session |
@@ -152,13 +153,16 @@ The scheduler and execution engine. Owns the gocron instance and job lifecycle.
 
 | Type / Function | Purpose |
 |---|---|
-| `Daemon` | Holds the scheduler, store ref, OC client, and live job map |
-| `New(store, oc)` | Constructor |
+| `Daemon` | Holds the scheduler, store ref, OC client (`OCClient` interface), and live job map |
+| `New(store, oc)` | Constructor; accepts `opencode.OCClient` interface (not concrete `*Client`) |
 | `Start(ctx)` | Loads active jobs, starts scheduler, blocks until ctx cancelled |
 | `RegisterJob(ctx, job)` | Persists job and adds it to the live scheduler |
 | `ConfirmJob(ctx, id)` | Transitions a pending job to completed, removes from scheduler |
 | `CancelJob(ctx, id)` | Transitions any non-terminal job to cancelled, removes from scheduler |
 | `executeJob(jobID)` | Core execution: create OC session → send prompt → parse status → update state |
+| `BuildPrompt(job, repo)` | Exported helper: builds the enriched prompt string with `PAIGE_STATUS` suffix |
+| `ParseAgentDone(output)` | Exported helper: scans output for `PAIGE_STATUS: done` marker |
+| `TriggerJob(id)` | Exported test hook: calls `executeJob` directly without waiting for cron |
 
 ### `internal/tui`
 
@@ -166,10 +170,15 @@ The terminal UI. Built with Bubble Tea. Views are separate models composed by th
 
 | Type / Function | Purpose |
 |---|---|
-| `Model` | Root model: owns current view, delegates to child models |
+| `Model` | Root model: owns current view (`viewJobList` / `viewJobDetail`), delegates to child models |
 | `Run(daemon, store)` | Entry point — starts the Bubble Tea program with alt-screen |
-| `JobListModel` | Job list screen with async load, state icons, `r` to refresh |
-| `JobDetailModel` | Job detail + run history (stub) |
+| `navigateToDetailMsg` | Message sent by `JobListModel` when user presses `enter` on a job; carries the selected `job.Job` |
+| `navigateToListMsg` | Message sent by `JobDetailModel` when user presses `esc`/`b`; `refresh bool` triggers list reload |
+| `JobListModel` | Job list with async load, state icons, state filter tab bar, `r` to refresh, `enter` to navigate |
+| `filterTab` | Enum for the tab bar: `tabAll`, `tabActive`, `tabRunning`, `tabPending`, `tabCompleted`, `tabCancelled`, `tabPaused`; `tab`/`shift+tab` to cycle |
+| `JobDetailModel` | Job detail view: metadata panel + scrollable run history (`bubbles/viewport`), confirm/cancel flow |
+| `confirmAction` | Enum used inside `JobDetailModel`: `confirmActionConfirm` / `confirmActionCancel` |
+| `confirmedMsg` | Async result of a `ConfirmJob` or `CancelJob` call; carries `err` |
 
 ### `cmd/paige`
 

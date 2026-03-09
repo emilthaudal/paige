@@ -22,6 +22,14 @@ type Client struct {
 	httpClient *http.Client
 }
 
+// OCClient is the interface Daemon uses to interact with OpenCode.
+// It is satisfied by *Client and can be mocked in tests.
+type OCClient interface {
+	CreateSession(ctx context.Context, title string) (Session, error)
+	SendPrompt(ctx context.Context, sessionID string, prompt string) (MessageResponse, error)
+	DeleteSession(ctx context.Context, sessionID string) error
+}
+
 // Option is a functional option for Client.
 type Option func(*Client)
 

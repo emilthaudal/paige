@@ -11,7 +11,7 @@ The v1 scaffold is complete and `go build ./...` passes cleanly. The following i
 - **Daemon** (`internal/daemon`): gocron v2 scheduler, job execution loop, `PAIGE_STATUS` response parsing, state machine transitions, `ConfirmJob` (pending → completed), `CancelJob` (any non-terminal → cancelled)
 - **TUI root model** (`internal/tui/tui.go`): Bubble Tea program wiring, view routing
 - **Job list screen** (`internal/tui/joblist.go`): Async load, state icons, `r` to refresh
-- **Job detail stub** (`internal/tui/jobdetail.go`): Present but non-functional (no-op Init/Update/View)
+- **Job detail stub** (`internal/tui/jobdetail.go`): Present but non-functional (no-op Init/Update/View) — replaced in Milestone 1
 
 ---
 
@@ -29,14 +29,16 @@ All scaffold issues resolved. The tool runs end-to-end without panics or silent 
 
 ---
 
-## Milestone 1 — Functional TUI
+## Milestone 1 — Functional TUI ✓ Complete
 
 A complete, navigable TUI that covers the core user workflow.
 
-- Job detail view: show job metadata and full run history
-- Confirm / close flow: key binding to confirm a pending job from the detail view (→ completed) or cancel it (→ cancelled)
-- Navigation: list → detail → back, keyboard-driven
-- State filter tabs: filter job list by state (active, pending, completed, cancelled, paused)
+- **Job detail view**: `JobDetailModel` shows job metadata panel + full run history in a scrollable `bubbles/viewport`. Each run displays status icon, timestamps, duration, agent_done indicator, and up to 3 lines of output preview.
+- **Confirm / cancel flow**: From the detail view, `enter` confirms a pending job (→ completed) and `c` cancels any non-terminal job (→ cancelled). Both show a `y/N` inline confirmation prompt before calling the daemon.
+- **Navigation**: `enter` on a job list item navigates to the detail view. `esc`/`b` returns to the list. Navigation back with `refresh: true` triggers a list reload.
+- **State filter tabs**: Tab bar at the top of the job list with `All / Active / Running / Pending / Completed / Cancelled / Paused`. `tab`/`shift+tab` cycles tabs and re-filters `ListJobs`.
+- **Store tests**: 12 tests in `internal/store/sqlite_test.go` covering all CRUD operations.
+- **Daemon tests**: 11 tests in `internal/daemon/daemon_test.go` using `mockOCClient` and `mockStore`; `OCClient` interface extracted from `opencode.Client`; `BuildPrompt` and `ParseAgentDone` exported.
 
 ---
 

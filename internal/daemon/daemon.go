@@ -36,14 +36,14 @@ Use "not_done" if the task is ongoing or requires further work.
 // Daemon is the background scheduler service.
 type Daemon struct {
 	store     store.Store
-	oc        *opencode.Client
+	oc        opencode.OCClient
 	scheduler gocron.Scheduler
 	mu        sync.Mutex
 	jobs      map[uuid.UUID]gocron.Job // gocron job handles by Paige job ID
 }
 
 // New creates a new Daemon. Call Start to begin scheduling.
-func New(st store.Store, oc *opencode.Client) (*Daemon, error) {
+func New(st store.Store, oc opencode.OCClient) (*Daemon, error) {
 	s, err := gocron.NewScheduler()
 	if err != nil {
 		return nil, fmt.Errorf("create scheduler: %w", err)
@@ -120,7 +120,11 @@ func (d *Daemon) CancelJob(ctx context.Context, id uuid.UUID) error {
 	return d.unscheduleJob(id)
 }
 
-// scheduleJob registers a job with the gocron scheduler.
+// TriggerJob immediately executes a job, bypassing its cron schedule.
+// This is primarily useful for testing.
+func (d *Daemon) TriggerJob(id uuid.UUID) {
+	d.executeJob(id)
+}
 func (d *Daemon) scheduleJob(j job.Job) error {
 	gj, err := d.scheduler.NewJob(
 		gocron.CronJob(j.Schedule, false),
@@ -199,7 +203,7 @@ func (d *Daemon) executeJob(jobID uuid.UUID) {
 	}
 
 	// Build the enriched prompt.
-	prompt := buildPrompt(j)
+	prompt := BuildPrompt(j)
 
 	// Send to OpenCode.
 	resp, err := d.oc.SendPrompt(ctx, session.ID, prompt)
@@ -211,7 +215,7 @@ func (d *Daemon) executeJob(jobID uuid.UUID) {
 	}
 
 	output := opencode.ExtractText(resp)
-	agentDone := parseAgentDone(output)
+	agentDone := ParseAgentDone(output)
 
 	// Finalize the run.
 	now := time.Now().UTC()
@@ -239,13 +243,13 @@ func (d *Daemon) executeJob(jobID uuid.UUID) {
 	_ = d.oc.DeleteSession(context.Background(), session.ID)
 }
 
-// buildPrompt constructs the full prompt to send to OpenCode.
-func buildPrompt(j job.Job) string {
+// BuildPrompt constructs the full prompt to send to OpenCode.
+func BuildPrompt(j job.Job) string {
 	return fmt.Sprintf("Repository: %s\n\n%s%s", j.Repo, j.Prompt, systemPromptSuffix)
 }
 
-// parseAgentDone looks for the PAIGE_STATUS marker in the output.
-func parseAgentDone(output string) bool {
+// ParseAgentDone looks for the PAIGE_STATUS marker in the output.
+func ParseAgentDone(output string) bool {
 	return strings.Contains(output, "PAIGE_STATUS: done")
 }
 

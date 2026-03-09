@@ -21,6 +21,13 @@ const (
 	viewAddJob
 )
 
+// navigateToDetailMsg is sent when the user selects a job from the list.
+type navigateToDetailMsg struct{ job job.Job }
+
+// navigateToListMsg is sent when the user navigates back from the detail view.
+// If refresh is true, the list should reload jobs.
+type navigateToListMsg struct{ refresh bool }
+
 // Model is the root Bubble Tea model. It owns the active view and shared state.
 type Model struct {
 	daemon  *daemon.Daemon
@@ -57,6 +64,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.jobList.SetSize(msg.Width, msg.Height)
+		m.jobDetail.SetSize(msg.Width, msg.Height)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -64,12 +72,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
+
+	case navigateToDetailMsg:
+		m.jobDetail = NewJobDetailModel(m.daemon, m.store, msg.job)
+		m.jobDetail.SetSize(m.width, m.height)
+		m.current = viewJobDetail
+		return m, m.jobDetail.Init()
+
+	case navigateToListMsg:
+		m.current = viewJobList
+		if msg.refresh {
+			m.jobList.loading = true
+			return m, m.jobList.loadJobs()
+		}
+		return m, nil
 	}
 
 	switch m.current {
 	case viewJobList:
 		updated, cmd := m.jobList.Update(msg)
 		m.jobList = updated.(*JobListModel)
+		return m, cmd
+	case viewJobDetail:
+		updated, cmd := m.jobDetail.Update(msg)
+		m.jobDetail = updated.(*JobDetailModel)
 		return m, cmd
 	}
 
@@ -86,6 +112,8 @@ func (m Model) View() string {
 	switch m.current {
 	case viewJobList:
 		return fmt.Sprintf("%s\n\n%s", header, m.jobList.View())
+	case viewJobDetail:
+		return fmt.Sprintf("%s\n\n%s", header, m.jobDetail.View())
 	default:
 		return header + "\n\n(coming soon)"
 	}
